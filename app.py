@@ -1,48 +1,76 @@
-from flask import Flask, render_template, request, jsonify
-import json
-import os
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from colorama import Fore, Style
 
-app = Flask(__name__)
+# Function to send a message to the chatbot
+def send_message(driver, message):
+    try:
+        # Find the input textarea element for the chat
+        input_box = driver.find_element(By.CSS_SELECTOR, "textarea.m-0")
 
-class ChatBot:
-    def __init__(self):
-        self.responses = {}
+        # Send the message to the chat
+        input_box.send_keys(message)
+        input_box.send_keys(Keys.RETURN)  # Press the "RETURN" key
 
-    def respond(self, message):
-        return self.responses.get(message.lower(), "I'm sorry, I don't understand.")
+        # Wait for the chatbot to respond (adjust wait time as needed)
+        time.sleep(5)
 
-    def learn(self, message, response):
-        self.responses[message.lower()] = response
+    except Exception as e:
+        print(f"{Fore.RED}An error occurred while sending message: {e}{Style.RESET_ALL}")
 
-    def save_responses(self):
-        with open('responses.json', 'w') as file:
-            json.dump(self.responses, file)
+# Function to extract the chatbot response
+def extract_chatbot_response(driver, words):
+    try:
+        # Calculate the delay based on the number of words
+        delay = len(words) * 0.5
+        time.sleep(delay)
 
-    def load_responses(self):
-        if os.path.exists('responses.json'):
-            with open('responses.json', 'r') as file:
-                self.responses = json.load(file)
+        # Find the element containing the chatbot response
+        response_element = driver.find_element(By.CSS_SELECTOR, "div.prose.dark\:prose-invert.flex-1 p")
 
-chatbot = ChatBot()
-chatbot.load_responses()
+        # Extract the text from the response element and limit its length
+        response_text = response_element.text.strip()[:1000]  # Limit to 1000 characters
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+        # Print the chatbot response
+        print(f"{Fore.GREEN}Chatbot response: {response_text}{Style.RESET_ALL}")
 
-@app.route('/ask', methods=['POST'])
-def ask():
-    user_message = request.form['user_message']
-    response = chatbot.respond(user_message)
-    return jsonify({'response': response})
+    except Exception as e:
+        print(f"{Fore.RED}An error occurred while extracting chatbot response: {e}{Style.RESET_ALL}")
 
-@app.route('/teach', methods=['POST'])
-def teach():
-    user_message = request.form['user_message']
-    response = request.form['response']
-    chatbot.learn(user_message, response)
-    chatbot.save_responses()
-    return jsonify({'message': 'Thank you for teaching me!'})
+# Set up options for headless mode
+options = Options()
+options.add_argument('-headless')  # Set headless mode
 
-if __name__ == '__main__':
-    app.run(port=3551, debug=True)
+# Initialize Firefox webdriver with headless option
+driver = webdriver.Firefox(options=options)
+
+# Navigate to the website
+driver.get("https://chatgptnologin.com/chatbot")
+
+while True:
+    # Wait for the page to load completely
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "textarea.m-0")))
+
+    # Click the "New chat" button
+    new_chat_button = driver.find_element(By.CSS_SELECTOR, "button.text-sidebar.flex")
+    new_chat_button.click()
+
+    # Take input for the question
+    question = input("Enter your question for the chatbot (type 'quit' to exit): ")
+
+    if question.lower() == 'quit':
+        break
+
+    # Send the question to the chatbot
+    send_message(driver, question)
+
+    # Extract the chatbot response
+    extract_chatbot_response(driver, question.split())
+
+# Close the browser window
+driver.quit()
